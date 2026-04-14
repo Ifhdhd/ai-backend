@@ -6,10 +6,8 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-#ambil API key dari environment (Render)
-
-api_key = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=api_key)
+# API key dari environment (Render)
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 model = genai.GenerativeModel("gemini-pro")
 
@@ -20,14 +18,14 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json()
-user_input = data.get("message")
+    user_input = data.get("message")
 
-if not user_input:
-    return jsonify({"error": "no input"})
+    if not user_input:
+        return jsonify({"error": "no input"})
 
-response = model.generate_content(user_input)
+    response = model.generate_content(user_input)
 
-return jsonify({"reply": response.text})
+    return jsonify({"reply": response.text})
 
 if __name__ == "__main__":
     app.run()
