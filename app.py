@@ -4,36 +4,30 @@ import google.generativeai as genai
 import os
 
 app = Flask(name)
-CORS(app)  # biar frontend bisa akses
+CORS(app)
 
-ambil API key dari environment (AMAN)
+API KEY dari environment
 
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+api_key = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=api_key)
 
-model = genai.GenerativeModel(
-model_name="gemini-pro",
-system_instruction="Kamu adalah AI pribadi milik user. Kamu fleksibel, santai, dan mengikuti gaya bicara user. Jawaban harus natural seperti manusia."
-)
-
-chat = model.start_chat(history=[])
+model = genai.GenerativeModel("gemini-pro")
 
 @app.route("/")
 def home():
-return "AI Backend Jalan 🚀"
+return "Backend jalan"
 
 @app.route("/chat", methods=["POST"])
-def chat_api():
-try:
+def chat():
 data = request.get_json()
 user_input = data.get("message")
 
-    response = chat.send_message(user_input)
+try:
+    response = model.generate_content(user_input)
     reply = response.text
-
     return jsonify({"reply": reply})
-
 except Exception as e:
-    return jsonify({"error": str(e)}), 500
+    return jsonify({"error": str(e)})
 
 if name == "main":
-app.run(host="0.0.0.0", port=10000)
+app.run()
