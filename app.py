@@ -6,7 +6,7 @@ import os
 app = Flask(name)
 CORS(app)
 
-API KEY dari environment
+#API KEY dari environment
 
 api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
