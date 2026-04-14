@@ -3,10 +3,10 @@ from flask_cors import CORS
 import google.generativeai as genai
 import os
 
-app = Flask(name)
+app = Flask(__name__)
 CORS(app)
 
-#ambil API key dari environment
+#ambil API key dari environment (Render)
 
 api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
@@ -19,15 +19,15 @@ def home():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-data = request.get_json()
+    data = request.get_json()
 user_input = data.get("message")
 
-try:
-    response = model.generate_content(user_input)
-    reply = response.text
-    return jsonify({"reply": reply})
-except Exception as e:
-    return jsonify({"error": str(e)})
+if not user_input:
+    return jsonify({"error": "no input"})
 
-if name == "main":
-app.run()
+response = model.generate_content(user_input)
+
+return jsonify({"reply": response.text})
+
+if __name__ == "__main__":
+    app.run()
