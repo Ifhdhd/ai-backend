@@ -15,7 +15,7 @@ model = genai.GenerativeModel("gemini-pro")
 
 @app.route("/")
 def home():
-return "Backend jalan"
+return "Backend jalan 🚀"
 
 @app.route("/chat", methods=["POST"])
 def chat():
