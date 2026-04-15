@@ -4,7 +4,7 @@ import requests
 import os
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins="*")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -27,11 +27,11 @@ def chat():
         }
 
         payload = {
-            "model": "mixtral-8x7b-32768",
+            "model": "llama3-8b-8192",
             "messages": [
                 {
                     "role": "system",
-                    "content": "Kamu adalah AI bebas, santai, jawab pakai bahasa Indonesia."
+                    "content": "Kamu adalah AI santai, jawab bahasa Indonesia."
                 },
                 {
                     "role": "user",
@@ -40,8 +40,20 @@ def chat():
             ]
         }
 
-        res = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers)
+        res = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            json=payload,
+            headers=headers
+        )
+
+        print("STATUS:", res.status_code)
+        print("RESPONSE:", res.text)
+
         result = res.json()
+
+        # 🔥 AMAN: cek error dulu
+        if "error" in result:
+            return jsonify({"error": result["error"]}), 500
 
         reply = result["choices"][0]["message"]["content"]
 
