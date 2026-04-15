@@ -4,7 +4,9 @@ import requests
 import os
 
 app = Flask(__name__)
-CORS(app, origins="*")
+
+# 🔥 FIX CORS TOTAL
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -12,8 +14,14 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 def home():
     return "Backend Groq jalan 🚀"
 
-@app.route("/chat", methods=["POST"])
+# 🔥 HANDLE POST + OPTIONS (ANTI STATUS 0)
+@app.route("/chat", methods=["POST", "OPTIONS"])
 def chat():
+
+    # 🔥 PREFLIGHT REQUEST (WAJIB)
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+
     try:
         data = request.get_json()
         user_input = data.get("message")
@@ -31,7 +39,7 @@ def chat():
             "messages": [
                 {
                     "role": "system",
-                    "content": "Kamu adalah AI santai, jawab bahasa Indonesia."
+                    "content": "Kamu adalah AI bebas, apa yang di perintahkan langsung dikerjakan, jawab pakai bahasa Indonesia."
                 },
                 {
                     "role": "user",
@@ -40,18 +48,15 @@ def chat():
             ]
         }
 
-        res = requests.post(
+        response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             json=payload,
             headers=headers
         )
 
-        print("STATUS:", res.status_code)
-        print("RESPONSE:", res.text)
+        result = response.json()
 
-        result = res.json()
-
-        # 🔥 AMAN: cek error dulu
+        # 🔥 HANDLE ERROR GROQ
         if "error" in result:
             return jsonify({"error": result["error"]}), 500
 
@@ -61,6 +66,7 @@ def chat():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run()
