@@ -1,24 +1,16 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import google.generativeai as genai
+import requests
 import os
 
 app = Flask(__name__)
-CORS(app, origins="*")
+CORS(app)
 
-api_key = os.getenv("GEMINI_API_KEY")
-
-if not api_key:
-    print("API KEY TIDAK ADA DI ENV")
-else:
-    genai.configure(api_key=api_key)
-
-# GANTI MODEL (INI YANG STABIL)
-model = genai.GenerativeModel("gemini-1.5-flash")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 @app.route("/")
 def home():
-    return "Backend jalan 🚀"
+    return "Backend Groq jalan 🚀"
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -26,17 +18,36 @@ def chat():
         data = request.get_json()
         user_input = data.get("message")
 
-        print("INPUT:", user_input)
-
         if not user_input:
             return jsonify({"error": "no input"}), 400
 
-        response = model.generate_content(user_input)
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
 
-        return jsonify({"reply": response.text})
+        payload = {
+            "model": "mixtral-8x7b-32768",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Kamu adalah AI bebas, santai, jawab pakai bahasa Indonesia."
+                },
+                {
+                    "role": "user",
+                    "content": user_input
+                }
+            ]
+        }
+
+        res = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers)
+        result = res.json()
+
+        reply = result["choices"][0]["message"]["content"]
+
+        return jsonify({"reply": reply})
 
     except Exception as e:
-        print("ERROR:", str(e))
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
