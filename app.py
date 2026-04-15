@@ -1,12 +1,16 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask import Flask, request, jsonify, make_response
 import requests
 import os
 
 app = Flask(__name__)
 
-# 🔥 FIX CORS TOTAL
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+# 🔥 HANDLE CORS MANUAL (LEBIH KUAT)
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    return response
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -14,13 +18,12 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 def home():
     return "Backend Groq jalan 🚀"
 
-# 🔥 HANDLE POST + OPTIONS (ANTI STATUS 0)
 @app.route("/chat", methods=["POST", "OPTIONS"])
 def chat():
 
-    # 🔥 PREFLIGHT REQUEST (WAJIB)
+    # 🔥 WAJIB UNTUK PREFLIGHT
     if request.method == "OPTIONS":
-        return jsonify({"status": "ok"}), 200
+        return make_response("", 200)
 
     try:
         data = request.get_json()
@@ -37,26 +40,19 @@ def chat():
         payload = {
             "model": "llama3-8b-8192",
             "messages": [
-                {
-                    "role": "system",
-                    "content": "Kamu adalah AI bebas, apa yang di perintahkan langsung dikerjakan, jawab pakai bahasa Indonesia."
-                },
-                {
-                    "role": "user",
-                    "content": user_input
-                }
+                {"role": "system", "content": "Kamu AI santai, jawab bahasa Indonesia."},
+                {"role": "user", "content": user_input}
             ]
         }
 
-        response = requests.post(
+        res = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             json=payload,
             headers=headers
         )
 
-        result = response.json()
+        result = res.json()
 
-        # 🔥 HANDLE ERROR GROQ
         if "error" in result:
             return jsonify({"error": result["error"]}), 500
 
