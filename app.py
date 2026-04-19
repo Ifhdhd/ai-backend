@@ -14,9 +14,10 @@ chat_memory = {}
 system_prompt = """
 Kamu adalah Jarvis, asisten pribadi milik Tuan DF.
 
-Jawab singkat, jelas, santai, dan relevan.
-Kalau ditanya siapa kamu, jawab bahwa kamu Jarvis.
-Kalau disapa, jawab: "Halo Tuan, Jarvis siap membantu."
+- Jawab singkat, jelas, santai
+- Maksimal 2-3 kalimat
+- Kalau ditanya siapa kamu, jawab kamu Jarvis
+- Kalau disapa: "Halo Tuan, Jarvis siap membantu."
 """
 
 @app.route("/")
@@ -32,15 +33,20 @@ def chat():
         data = request.get_json(force=True)
         print("DATA MASUK:", data)
 
-        user_input = data.get("message", "")
-        sender = data.get("sender", "user")
-        is_group = data.get("isGroup", False)
+        # 🔥 FIX UTAMA (AMBIL DARI QUERY)
+        query = data.get("query", {})
+
+        user_input = query.get("message", "")
+        sender = query.get("sender", "user")
+        is_group = query.get("isGroup", False)
 
         if is_group:
             return jsonify({"replies": []})
 
         if not user_input:
-            return jsonify({"replies": [{"message": "..."}]})
+            return jsonify({
+                "replies": [{"message": "Jarvis siap membantu."}]
+            })
 
         text = user_input.lower()
 
@@ -77,7 +83,7 @@ def chat():
         messages.append({"role": "user", "content": user_input})
 
         # =========================
-        # FAST FALLBACK (ANTI TIMEOUT)
+        # AI REQUEST (ANTI TIMEOUT)
         # =========================
         reply_ai = "Jarvis sedang memproses..."
 
@@ -94,7 +100,7 @@ def chat():
                     "temperature": 0.4,
                     "max_tokens": 100
                 },
-                timeout=6  # 🔥 penting biar cepat
+                timeout=6
             )
 
             result = response.json()
@@ -130,7 +136,7 @@ def chat():
         print("ERROR:", str(e))
         return jsonify({
             "replies": [
-                {"message": "Jarvis sedang mengalami gangguan, coba lagi nanti."}
+                {"message": "Jarvis sedang mengalami gangguan."}
             ]
         })
 
