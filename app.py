@@ -7,52 +7,25 @@ import random
 app = Flask(__name__)
 CORS(app)
 
-# API KEY dari Render
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# MEMORY CHAT (sementara, hilang kalau server restart)
 chat_memory = {}
 
-# SYSTEM PROMPT (JARVIS FULL)
 system_prompt = """
 Kamu adalah Jarvis, asisten pribadi milik Tuan DF.
 
-IDENTITAS:
-- Nama: Jarvis
-- Peran: Asisten pribadi digital
-- Tugas: Membantu user menjawab, memberi solusi, dan menemani percakapan
-
-ATURAN:
-- Jawab singkat, jelas, tidak bertele-tele
-- Maksimal 2-3 kalimat (kecuali diminta panjang)
-- Gunakan bahasa santai tapi tetap sopan
-- Jangan keluar topik
-
-GAYA:
-- Seperti asisten pintar (Jarvis Iron Man versi santai)
-- Natural, tidak kaku
-- Sedikit berkarakter
-
-PERILAKU:
-- Anggap user adalah Tuan kamu
-- Selalu siap membantu
-- Kalau tidak yakin, jawab versi paling masuk akal
-
-KHUSUS:
-- Jika user bertanya "kamu siapa", jawab bahwa kamu adalah Jarvis, asisten pribadi Tuan DF
-- Jika user menyapa ("halo", "hai"), jawab:
-  "Halo Tuan, Jarvis siap membantu."
-- Jika percakapan santai, boleh balas santai juga
+Jawab singkat, jelas, santai, dan relevan.
+Kalau ditanya siapa kamu, jawab bahwa kamu Jarvis.
+Kalau disapa, jawab: "Halo Tuan, Jarvis siap membantu."
 """
 
 @app.route("/")
 def home():
-    return "Backend Jarvis aktif 🚀"
+    return "Jarvis backend aktif 🚀"
 
 @app.route("/chat", methods=["GET", "POST"])
 def chat():
     try:
-        # Handle GET
         if request.method == "GET":
             return "CHAT READY ✅"
 
@@ -63,46 +36,36 @@ def chat():
         sender = data.get("sender", "user")
         is_group = data.get("isGroup", False)
 
-        # ❌ Jangan balas grup
         if is_group:
             return jsonify({"replies": []})
 
-        # Jika kosong
         if not user_input:
-            return jsonify({
-                "replies": [{"message": "..."}]
-            })
+            return jsonify({"replies": [{"message": "..."}]})
 
         text = user_input.lower()
 
         # =========================
-        # 🔥 MODE "TUAN SEDANG TIDAK ADA"
+        # MODE TUAN TIDAK ADA
         # =========================
         keywords = [
-            "mana", "dimana", "ke mana",
-            "kemana", "lagi dimana",
-            "kok ga bales", "tidak balas",
-            "kenapa ga jawab", "kenapa tidak jawab"
+            "mana", "dimana", "kemana",
+            "kok ga bales", "kenapa ga jawab",
+            "lagi dimana"
         ]
 
         if any(k in text for k in keywords):
             responses = [
-                "Saat ini Tuan DF sedang tidak berada di tempat. Untuk sementara, saya Jarvis yang akan membantu Anda.",
-                "Tuan DF sedang tidak menggunakan handphonenya saat ini. Saya Jarvis siap membantu jika diperlukan.",
-                "Mohon maaf, Tuan DF sedang tidak tersedia. Saya Jarvis akan mewakili untuk merespon pesan Anda.",
-                "Saat ini Tuan DF sedang tidak aktif di perangkatnya. Saya Jarvis akan membantu sementara."
+                "Saat ini Tuan DF sedang tidak berada di tempat. Saya Jarvis akan membantu Anda sementara.",
+                "Tuan DF sedang tidak menggunakan handphonenya saat ini. Saya Jarvis siap membantu.",
+                "Mohon maaf, Tuan DF sedang tidak tersedia. Saya Jarvis yang akan merespon pesan Anda."
             ]
 
-            reply = random.choice(responses)
-
             return jsonify({
-                "replies": [
-                    {"message": reply}
-                ]
+                "replies": [{"message": random.choice(responses)}]
             })
 
         # =========================
-        # 💾 MEMORY PER USER
+        # MEMORY
         # =========================
         if sender not in chat_memory:
             chat_memory[sender] = []
@@ -110,55 +73,44 @@ def chat():
         history = chat_memory[sender]
 
         messages = [{"role": "system", "content": system_prompt}]
-        messages += history[-6:]  # ambil 6 pesan terakhir
-
-        messages.append({
-            "role": "user",
-            "content": user_input
-        })
+        messages += history[-4:]
+        messages.append({"role": "user", "content": user_input})
 
         # =========================
-        # 🤖 REQUEST KE GROQ
+        # FAST FALLBACK (ANTI TIMEOUT)
         # =========================
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "llama-3.1-8b-instant",
-                "messages": messages,
-                "temperature": 0.4,
-                "max_tokens": 150
-            },
-            timeout=10
-        )
+        reply_ai = "Jarvis sedang memproses..."
 
-        result = response.json()
-        print("RESPONSE GROQ:", result)
+        try:
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "llama-3.1-8b-instant",
+                    "messages": messages,
+                    "temperature": 0.4,
+                    "max_tokens": 100
+                },
+                timeout=6  # 🔥 penting biar cepat
+            )
 
-        if "choices" not in result:
-            return jsonify({
-                "replies": [
-                    {"message": "Jarvis sedang mengalami gangguan kecil."}
-                ]
-            })
+            result = response.json()
 
-        reply_ai = result["choices"][0]["message"]["content"]
+            if "choices" in result:
+                reply_ai = result["choices"][0]["message"]["content"]
 
-        # Simpan ke memory
-        chat_memory[sender].append({
-            "role": "user",
-            "content": user_input
-        })
-        chat_memory[sender].append({
-            "role": "assistant",
-            "content": reply_ai
-        })
+        except Exception as e:
+            print("AI ERROR:", str(e))
+
+        # simpan memory
+        chat_memory[sender].append({"role": "user", "content": user_input})
+        chat_memory[sender].append({"role": "assistant", "content": reply_ai})
 
         # =========================
-        # 🤖 INTRO JARVIS (HANYA AWAL)
+        # INTRO (HANYA AWAL)
         # =========================
         if len(chat_memory[sender]) <= 2:
             final_reply = f"Anda terhubung dengan Jarvis, asisten pribadi Tuan DF.\n\n{reply_ai}"
@@ -166,7 +118,7 @@ def chat():
             final_reply = reply_ai
 
         # =========================
-        # 📤 RETURN KE AUTORESPONDER
+        # RETURN KE AUTORESPONDER
         # =========================
         return jsonify({
             "replies": [
@@ -178,7 +130,7 @@ def chat():
         print("ERROR:", str(e))
         return jsonify({
             "replies": [
-                {"message": "Server sedang sibuk, coba lagi nanti."}
+                {"message": "Jarvis sedang mengalami gangguan, coba lagi nanti."}
             ]
         })
 
