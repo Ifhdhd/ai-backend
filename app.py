@@ -52,7 +52,7 @@ def text_to_speech(text):
 
         if r.status_code != 200:
             print("FISH ERROR:", r.text)
-            return None
+            return ""
 
         os.makedirs("static", exist_ok=True)
 
@@ -62,12 +62,11 @@ def text_to_speech(text):
         with open(file_path, "wb") as f:
             f.write(r.content)
 
-        # 🔥 AUTO DOMAIN (PENTING)
         return request.host_url + "static/" + filename
 
     except Exception as e:
         print("TTS ERROR:", str(e))
-        return None
+        return ""
 
 
 # =========================
@@ -90,7 +89,6 @@ def chat():
             return "CHAT READY ✅"
 
         data = request.get_json(force=True)
-        print("DATA MASUK:", data)
 
         query = data.get("query", {})
 
@@ -99,15 +97,18 @@ def chat():
         is_group = query.get("isGroup", False)
 
         if is_group:
-            return jsonify({"replies": []})
+            return jsonify({
+                "message": "",
+                "audio": ""
+            })
 
         if not user_input:
             final_reply = "Jarvis siap membantu."
             audio_url = text_to_speech(final_reply)
 
             return jsonify({
-                "replies": [{"message": final_reply}],
-                "audio": audio_url if audio_url else ""
+                "message": final_reply,
+                "audio": audio_url
             })
 
         text = user_input.lower()
@@ -132,8 +133,8 @@ def chat():
             audio_url = text_to_speech(final_reply)
 
             return jsonify({
-                "replies": [{"message": final_reply}],
-                "audio": audio_url if audio_url else ""
+                "message": final_reply,
+                "audio": audio_url
             })
 
         # =========================
@@ -192,22 +193,22 @@ def chat():
             final_reply = reply_ai
 
         # =========================
-        # BUAT AUDIO
+        # AUDIO
         # =========================
         audio_url = text_to_speech(final_reply)
 
         # =========================
-        # RETURN FINAL
+        # RETURN FINAL (FIX)
         # =========================
         return jsonify({
-            "replies": [{"message": final_reply}],
-            "audio": audio_url if audio_url else ""
+            "message": final_reply,
+            "audio": audio_url
         })
 
     except Exception as e:
         print("ERROR:", str(e))
         return jsonify({
-            "replies": [{"message": "Jarvis sedang mengalami gangguan."}],
+            "message": "Jarvis sedang mengalami gangguan.",
             "audio": ""
         })
 
