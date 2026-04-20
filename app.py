@@ -7,22 +7,66 @@ import random
 app = Flask(__name__)
 CORS(app)
 
+# =========================
+# API KEYS
+# =========================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+FISH_API_KEY = os.getenv("FISH_API_KEY")
 
+# =========================
+# MEMORY
+# =========================
 chat_memory = {}
 
+# =========================
+# SYSTEM PROMPT (JARVIS)
+# =========================
 system_prompt = """
 Kamu adalah Jarvis, asisten pribadi milik Tuan DF.
 
-- Jawab singkat, jelas, santai
-- Maksimal 2-3 kalimat
-- Kalau ditanya siapa kamu, jawab kamu Jarvis
-- Kalau disapa: "Halo Tuan, Jarvis siap membantu."
+ATURAN:
+- Jawab singkat, jelas, santai (maks 2 kalimat)
+- Gunakan gaya elegan dan tenang
+- Panggil user dengan "Tuan"
+- Jika ditanya siapa kamu, jawab kamu Jarvis
 """
+
+# =========================
+# TEXT TO SPEECH (FISH AUDIO)
+# =========================
+def text_to_speech(text):
+    try:
+        url = "https://api.fish.audio/v1/tts"
+
+        headers = {
+            "Authorization": f"Bearer {FISH_API_KEY}",
+            "Content-Type": "application/json",
+            "model": "s1"
+        }
+
+        data = {
+            "text": text
+        }
+
+        r = requests.post(url, json=data, headers=headers, timeout=10)
+
+        os.makedirs("static", exist_ok=True)
+        file_path = "static/jarvis.mp3"
+
+        with open(file_path, "wb") as f:
+            f.write(r.content)
+
+        return "https://ai-backend-igmc.onrender.com/static/jarvis.mp3"
+
+    except Exception as e:
+        print("TTS ERROR:", str(e))
+        return None
+
 
 @app.route("/")
 def home():
     return "Jarvis backend aktif 🚀"
+
 
 @app.route("/chat", methods=["GET", "POST"])
 def chat():
@@ -33,7 +77,9 @@ def chat():
         data = request.get_json(force=True)
         print("DATA MASUK:", data)
 
-        # 🔥 FIX UTAMA (AMBIL DARI QUERY)
+        # =========================
+        # AMBIL DATA AUTORESPONDER
+        # =========================
         query = data.get("query", {})
 
         user_input = query.get("message", "")
@@ -61,17 +107,19 @@ def chat():
 
         if any(k in text for k in keywords):
             responses = [
-                "Saat ini Tuan DF sedang tidak berada di tempat. Saya Jarvis akan membantu Anda sementara.",
-                "Tuan DF sedang tidak menggunakan handphonenya saat ini. Saya Jarvis siap membantu.",
-                "Mohon maaf, Tuan DF sedang tidak tersedia. Saya Jarvis yang akan merespon pesan Anda."
+                "Saat ini Tuan DF sedang tidak berada di tempat. Saya Jarvis akan membantu Anda.",
+                "Tuan DF sedang tidak menggunakan handphonenya. Saya Jarvis siap membantu.",
+                "Mohon maaf, Tuan DF sedang tidak tersedia. Saya akan menggantikan sementara."
             ]
 
+            final_reply = random.choice(responses)
+
             return jsonify({
-                "replies": [{"message": random.choice(responses)}]
+                "replies": [{"message": final_reply}]
             })
 
         # =========================
-        # MEMORY
+        # MEMORY CHAT
         # =========================
         if sender not in chat_memory:
             chat_memory[sender] = []
@@ -83,7 +131,7 @@ def chat():
         messages.append({"role": "user", "content": user_input})
 
         # =========================
-        # AI REQUEST (ANTI TIMEOUT)
+        # REQUEST KE GROQ
         # =========================
         reply_ai = "Jarvis sedang memproses..."
 
@@ -111,12 +159,14 @@ def chat():
         except Exception as e:
             print("AI ERROR:", str(e))
 
-        # simpan memory
+        # =========================
+        # SIMPAN MEMORY
+        # =========================
         chat_memory[sender].append({"role": "user", "content": user_input})
         chat_memory[sender].append({"role": "assistant", "content": reply_ai})
 
         # =========================
-        # INTRO (HANYA AWAL)
+        # INTRO JARVIS (HANYA AWAL)
         # =========================
         if len(chat_memory[sender]) <= 2:
             final_reply = f"Anda terhubung dengan Jarvis, asisten pribadi Tuan DF.\n\n{reply_ai}"
@@ -124,12 +174,18 @@ def chat():
             final_reply = reply_ai
 
         # =========================
+        # BUAT SUARA
+        # =========================
+        audio_url = text_to_speech(final_reply)
+
+        # =========================
         # RETURN KE AUTORESPONDER
         # =========================
         return jsonify({
             "replies": [
                 {"message": final_reply}
-            ]
+            ],
+            "audio": audio_url
         })
 
     except Exception as e:
@@ -139,6 +195,7 @@ def chat():
                 {"message": "Jarvis sedang mengalami gangguan."}
             ]
         })
+
 
 if __name__ == "__main__":
     app.run()
