@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
 import os
@@ -19,7 +19,7 @@ FISH_API_KEY = os.getenv("FISH_API_KEY")
 chat_memory = {}
 
 # =========================
-# SYSTEM PROMPT (JARVIS)
+# SYSTEM PROMPT
 # =========================
 system_prompt = """
 Kamu adalah Jarvis, asisten pribadi milik Tuan DF.
@@ -32,7 +32,7 @@ ATURAN:
 """
 
 # =========================
-# TEXT TO SPEECH (FISH AUDIO)
+# TEXT TO SPEECH (FISH)
 # =========================
 def text_to_speech(text):
     try:
@@ -50,22 +50,37 @@ def text_to_speech(text):
 
         r = requests.post(url, json=data, headers=headers, timeout=10)
 
+        if r.status_code != 200:
+            print("FISH ERROR:", r.text)
+            return None
+
         os.makedirs("static", exist_ok=True)
-        file_path = "static/jarvis.mp3"
+
+        filename = f"jarvis_{random.randint(1000,9999)}.mp3"
+        file_path = f"static/{filename}"
 
         with open(file_path, "wb") as f:
             f.write(r.content)
 
-        return "https://ai-backend-igmc.onrender.com/static/jarvis.mp3"
+        # 🔥 AUTO DOMAIN (PENTING)
+        return request.host_url + "static/" + filename
 
     except Exception as e:
         print("TTS ERROR:", str(e))
         return None
 
 
+# =========================
+# ROUTES
+# =========================
 @app.route("/")
 def home():
     return "Jarvis backend aktif 🚀"
+
+
+@app.route("/static/<path:filename>")
+def serve_audio(filename):
+    return send_from_directory("static", filename)
 
 
 @app.route("/chat", methods=["GET", "POST"])
@@ -77,9 +92,6 @@ def chat():
         data = request.get_json(force=True)
         print("DATA MASUK:", data)
 
-        # =========================
-        # AMBIL DATA AUTORESPONDER
-        # =========================
         query = data.get("query", {})
 
         user_input = query.get("message", "")
@@ -90,8 +102,12 @@ def chat():
             return jsonify({"replies": []})
 
         if not user_input:
+            final_reply = "Jarvis siap membantu."
+            audio_url = text_to_speech(final_reply)
+
             return jsonify({
-                "replies": [{"message": "Jarvis siap membantu."}]
+                "replies": [{"message": final_reply}],
+                "audio": audio_url if audio_url else ""
             })
 
         text = user_input.lower()
@@ -113,13 +129,15 @@ def chat():
             ]
 
             final_reply = random.choice(responses)
+            audio_url = text_to_speech(final_reply)
 
             return jsonify({
-                "replies": [{"message": final_reply}]
+                "replies": [{"message": final_reply}],
+                "audio": audio_url if audio_url else ""
             })
 
         # =========================
-        # MEMORY CHAT
+        # MEMORY
         # =========================
         if sender not in chat_memory:
             chat_memory[sender] = []
@@ -131,7 +149,7 @@ def chat():
         messages.append({"role": "user", "content": user_input})
 
         # =========================
-        # REQUEST KE GROQ
+        # GROQ AI
         # =========================
         reply_ai = "Jarvis sedang memproses..."
 
@@ -166,7 +184,7 @@ def chat():
         chat_memory[sender].append({"role": "assistant", "content": reply_ai})
 
         # =========================
-        # INTRO JARVIS (HANYA AWAL)
+        # INTRO AWAL
         # =========================
         if len(chat_memory[sender]) <= 2:
             final_reply = f"Anda terhubung dengan Jarvis, asisten pribadi Tuan DF.\n\n{reply_ai}"
@@ -174,26 +192,23 @@ def chat():
             final_reply = reply_ai
 
         # =========================
-        # BUAT SUARA
+        # BUAT AUDIO
         # =========================
         audio_url = text_to_speech(final_reply)
 
         # =========================
-        # RETURN KE AUTORESPONDER
+        # RETURN FINAL
         # =========================
         return jsonify({
-            "replies": [
-                {"message": final_reply}
-            ],
-            "audio": audio_url
+            "replies": [{"message": final_reply}],
+            "audio": audio_url if audio_url else ""
         })
 
     except Exception as e:
         print("ERROR:", str(e))
         return jsonify({
-            "replies": [
-                {"message": "Jarvis sedang mengalami gangguan."}
-            ]
+            "replies": [{"message": "Jarvis sedang mengalami gangguan."}],
+            "audio": ""
         })
 
 
