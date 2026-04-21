@@ -39,29 +39,30 @@ ALUR WAJIB:
 """
 
 # =========================
-# TEXT TO SPEECH - SUDAH DIFIX UNTUK RENDER
+# TEXT TO SPEECH - SUDAH DIFIX (MODEL DI HEADER)
 # =========================
 def text_to_speech(text):
     try:
         if not text or len(text.strip()) < 3:
+            print("TTS: Text terlalu pendek")
             return ""
 
         url = "https://api.fish.audio/v1/tts"
 
         headers = {
             "Authorization": f"Bearer {FISH_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "model": "s1"                    # ← INI YANG PENTING (di HEADER)
         }
 
         data = {
-            "text": text.strip()[:500],
-            "model": "s1"
+            "text": text.strip()[:500]
         }
 
         r = requests.post(url, json=data, headers=headers, timeout=15)
 
         if r.status_code != 200:
-            print("FISH TTS ERROR:", r.status_code, r.text)
+            print("❌ FISH TTS ERROR:", r.status_code, r.text)
             return ""
 
         # Simpan file
@@ -72,15 +73,15 @@ def text_to_speech(text):
         with open(file_path, "wb") as f:
             f.write(r.content)
 
-        # 🔥 FIX KHUSUS RENDER (hardcoded URL)
+        # Hardcoded URL untuk Render
         base_url = "https://ai-backend-0d98.onrender.com"
         audio_url = f"{base_url}/static/{filename}"
 
-        print("✅ TTS BERHASIL:", audio_url)
+        print(f"✅ TTS BERHASIL → {audio_url}")
         return audio_url
 
     except Exception as e:
-        print("TTS EXCEPTION:", str(e))
+        print("❌ TTS EXCEPTION:", str(e))
         return ""
 
 
@@ -112,15 +113,12 @@ def chat():
         if is_group:
             return jsonify({"message": "", "audio": "", "state": "idle"})
 
-        # Inisialisasi
         if sender not in chat_memory:
             chat_memory[sender] = []
         if sender not in chat_state:
             chat_state[sender] = "idle"
 
-        # =============================================
-        # PESAN BARU MASUK (pertama kali)
-        # =============================================
+        # Pesan pertama dari WhatsApp
         if not user_input and chat_state[sender] == "idle":
             final_reply = f"Tuan, ada pesan dari {sender_name}.\nMau saya bacakan?"
 
@@ -134,9 +132,7 @@ def chat():
                 "state": chat_state[sender]
             })
 
-        # =============================================
-        # PROSES DENGAN AI
-        # =============================================
+        # Proses AI
         messages = [{"role": "system", "content": system_prompt}]
         messages += chat_memory[sender][-8:]
         messages.append({"role": "user", "content": user_input})
@@ -144,10 +140,7 @@ def chat():
         try:
             response = requests.post(
                 "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {GROQ_API_KEY}",
-                    "Content-Type": "application/json"
-                },
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
                 json={
                     "model": "llama-3.1-8b-instant",
                     "messages": messages,
@@ -157,16 +150,15 @@ def chat():
                 timeout=10
             )
             result = response.json()
-            reply_ai = result["choices"][0]["message"]["content"] if "choices" in result else "Maaf Tuan, ada gangguan."
+            reply_ai = result["choices"][0]["message"]["content"] if "choices" in result else "Maaf Tuan."
         except Exception as e:
             print("GROQ ERROR:", str(e))
             reply_ai = "Saya sedang memproses, Tuan."
 
-        # Simpan memory
         chat_memory[sender].append({"role": "user", "content": user_input})
         chat_memory[sender].append({"role": "assistant", "content": reply_ai})
 
-        # Update state sederhana
+        # Update state
         text_lower = user_input.lower()
         if any(word in text_lower for word in ["ya", "bacakan", "baca"]):
             chat_state[sender] = "waiting_reply"
@@ -183,11 +175,7 @@ def chat():
 
     except Exception as e:
         print("ERROR UTAMA:", str(e))
-        return jsonify({
-            "message": "Jarvis sedang mengalami gangguan.",
-            "audio": "",
-            "state": "idle"
-        })
+        return jsonify({"message": "Gangguan sementara.", "audio": "", "state": "idle"})
 
 
 if __name__ == "__main__":
