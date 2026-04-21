@@ -17,10 +17,10 @@ FISH_API_KEY = os.getenv("FISH_API_KEY")
 # MEMORY + STATE
 # =========================
 chat_memory = {}
-chat_state = {}  # Tambahan state per pengirim
+chat_state = {}
 
 # =========================
-# SYSTEM PROMPT (DIOPTIMALKAN)
+# SYSTEM PROMPT
 # =========================
 system_prompt = """
 Kamu adalah Jarvis, asisten pribadi milik Tuan DF.
@@ -29,21 +29,23 @@ ATURAN:
 - Jawab sangat singkat, maksimal 2 kalimat.
 - Gaya elegan, tenang, sopan.
 - Selalu panggil user dengan "Tuan".
-- Jika ditanya siapa kamu, jawab: "Saya Jarvis, asisten pribadi Tuan DF."
 
-ALUR WHATSAPP WAJIB:
-1. Pesan pertama masuk: Beritahu ada pesan dari siapa, lalu tanyakan "Mau saya bacakan?"
-2. Jika Tuan jawab ya/bacakan → bacakan isi pesannya dengan jelas.
+ALUR WAJIB:
+1. Pesan pertama: "Tuan, ada pesan dari [nama]. Mau saya bacakan?"
+2. Jika Tuan jawab ya/bacakan → bacakan isi pesannya.
 3. Setelah dibacakan → tanyakan "Mau membalas pesan ini?"
-4. Jika Tuan jawab ya/balas → jawab: "Silakan Tuan, katakan apa yang ingin dibalas."
-5. Jika Tuan diam saja → jawab: "Anda terhubung dengan Jarvis, asisten pribadi Tuan DF."
+4. Jika Tuan jawab ya/balas → jawab "Silakan Tuan, katakan apa yang ingin dibalas."
+5. Jika Tuan diam saja → jawab "Anda terhubung dengan Jarvis, asisten pribadi Tuan DF."
 """
 
 # =========================
-# TEXT TO SPEECH (FISH s1)
+# TEXT TO SPEECH - SUDAH DIFIX UNTUK RENDER
 # =========================
 def text_to_speech(text):
     try:
+        if not text or len(text.strip()) < 3:
+            return ""
+
         url = "https://api.fish.audio/v1/tts"
 
         headers = {
@@ -52,27 +54,33 @@ def text_to_speech(text):
         }
 
         data = {
-            "text": text,
-            "model": "s1"          # sesuai keinginanmu
+            "text": text.strip()[:500],
+            "model": "s1"
         }
 
-        r = requests.post(url, json=data, headers=headers, timeout=10)
+        r = requests.post(url, json=data, headers=headers, timeout=15)
 
         if r.status_code != 200:
-            print("FISH ERROR:", r.text)
+            print("FISH TTS ERROR:", r.status_code, r.text)
             return ""
 
+        # Simpan file
         os.makedirs("static", exist_ok=True)
-        filename = f"jarvis_{random.randint(1000,9999)}.mp3"
+        filename = f"jarvis_{random.randint(10000,99999)}.mp3"
         file_path = f"static/{filename}"
 
         with open(file_path, "wb") as f:
             f.write(r.content)
 
-        return request.host_url + "static/" + filename
+        # 🔥 FIX KHUSUS RENDER (hardcoded URL)
+        base_url = "https://ai-backend-0d98.onrender.com"
+        audio_url = f"{base_url}/static/{filename}"
+
+        print("✅ TTS BERHASIL:", audio_url)
+        return audio_url
 
     except Exception as e:
-        print("TTS ERROR:", str(e))
+        print("TTS EXCEPTION:", str(e))
         return ""
 
 
@@ -102,54 +110,56 @@ def chat():
         is_group = query.get("isGroup", False)
 
         if is_group:
-            return jsonify({"message": "", "audio": ""})
+            return jsonify({"message": "", "audio": "", "state": "idle"})
 
-        # Inisialisasi memory & state
+        # Inisialisasi
         if sender not in chat_memory:
             chat_memory[sender] = []
         if sender not in chat_state:
             chat_state[sender] = "idle"
 
-        history = chat_memory[sender]
-        state = chat_state[sender]
-
         # =============================================
-        # PESAN BARU DARI WHATSAPP (Pertama kali)
+        # PESAN BARU MASUK (pertama kali)
         # =============================================
-        if not user_input and state == "idle":
-            final_reply = f"Tuan, ada pesan masuk dari {sender_name}."
-            final_reply += "\nMau saya bacakan?"
+        if not user_input and chat_state[sender] == "idle":
+            final_reply = f"Tuan, ada pesan dari {sender_name}.\nMau saya bacakan?"
 
             audio_url = text_to_speech(final_reply)
-
             chat_memory[sender].append({"role": "assistant", "content": final_reply})
             chat_state[sender] = "waiting_read"
 
-            return jsonify({"message": final_reply, "audio": audio_url})
+            return jsonify({
+                "message": final_reply,
+                "audio": audio_url,
+                "state": chat_state[sender]
+            })
 
         # =============================================
         # PROSES DENGAN AI
         # =============================================
         messages = [{"role": "system", "content": system_prompt}]
-        messages += history[-8:]
+        messages += chat_memory[sender][-8:]
         messages.append({"role": "user", "content": user_input})
 
         try:
             response = requests.post(
                 "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
                 json={
                     "model": "llama-3.1-8b-instant",
                     "messages": messages,
                     "temperature": 0.5,
                     "max_tokens": 130
                 },
-                timeout=8
+                timeout=10
             )
             result = response.json()
             reply_ai = result["choices"][0]["message"]["content"] if "choices" in result else "Maaf Tuan, ada gangguan."
         except Exception as e:
-            print("AI ERROR:", str(e))
+            print("GROQ ERROR:", str(e))
             reply_ai = "Saya sedang memproses, Tuan."
 
         # Simpan memory
@@ -158,9 +168,9 @@ def chat():
 
         # Update state sederhana
         text_lower = user_input.lower()
-        if "ya" in text_lower or "bacakan" in text_lower:
+        if any(word in text_lower for word in ["ya", "bacakan", "baca"]):
             chat_state[sender] = "waiting_reply"
-        elif "balas" in text_lower or "ya" in text_lower and chat_state[sender] == "waiting_reply":
+        elif any(word in text_lower for word in ["balas", "ya"]) and chat_state[sender] == "waiting_reply":
             chat_state[sender] = "reply_mode"
 
         audio_url = text_to_speech(reply_ai)
@@ -168,16 +178,17 @@ def chat():
         return jsonify({
             "message": reply_ai,
             "audio": audio_url,
-            "state": chat_state[sender]   # Optional, bisa dipakai di Tasker
+            "state": chat_state[sender]
         })
 
     except Exception as e:
-        print("ERROR:", str(e))
+        print("ERROR UTAMA:", str(e))
         return jsonify({
             "message": "Jarvis sedang mengalami gangguan.",
-            "audio": ""
+            "audio": "",
+            "state": "idle"
         })
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
