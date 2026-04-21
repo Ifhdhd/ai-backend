@@ -8,10 +8,17 @@ app = Flask(__name__)
 CORS(app)
 
 # =========================
-# API KEYS
+# API KEYS & CONFIG
 # =========================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-FISH_API_KEY = os.getenv("FISH_API_KEY")
+MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY")
+MINIMAX_GROUP_ID = os.getenv("MINIMAX_GROUP_ID")
+
+# VOICE_ID dari Moss Audio (sudah diisi sesuai yang kamu kasih)
+VOICE_ID = "moss_audio_8a8e253f-3d67-11f1-a34e-be827e93647d"
+
+# Model TTS MiniMax
+TTS_MODEL = "speech-2.6-turbo"   # Bisa diganti ke "speech-2.8-hd" kalau mau kualitas lebih tinggi
 
 # =========================
 # MEMORY + STATE
@@ -39,7 +46,7 @@ ALUR WAJIB:
 """
 
 # =========================
-# TEXT TO SPEECH - SUDAH DIFIX (MODEL DI HEADER)
+# TEXT TO SPEECH - MINIMAX
 # =========================
 def text_to_speech(text):
     try:
@@ -47,41 +54,66 @@ def text_to_speech(text):
             print("TTS: Text terlalu pendek")
             return ""
 
-        url = "https://api.fish.audio/v1/tts"
+        url = "https://api.minimax.io/v1/t2a_v2"
 
         headers = {
-            "Authorization": f"Bearer {FISH_API_KEY}",
-            "Content-Type": "application/json",
-            "model": "s1"                    # ← INI YANG PENTING (di HEADER)
+            "Authorization": f"Bearer {MINIMAX_API_KEY}",
+            "Content-Type": "application/json"
         }
 
-        data = {
-            "text": text.strip()[:500]
+        payload = {
+            "model": TTS_MODEL,
+            "text": text.strip()[:4500],
+            "stream": False,
+            "voice_setting": {
+                "voice_id": VOICE_ID,
+                "speed": 1.0,
+                "vol": 1.0,
+                "pitch": 0,
+                "emotion": "neutral"
+            },
+            "audio_setting": {
+                "sample_rate": 32000,
+                "bitrate": 128000,
+                "format": "mp3",
+                "channel": 1
+            }
         }
 
-        r = requests.post(url, json=data, headers=headers, timeout=15)
+        # Tambahkan GroupId jika ada
+        if MINIMAX_GROUP_ID:
+            url = f"https://api.minimax.io/v1/t2a_v2?GroupId={MINIMAX_GROUP_ID}"
+
+        r = requests.post(url, json=payload, headers=headers, timeout=20)
 
         if r.status_code != 200:
-            print("❌ FISH TTS ERROR:", r.status_code, r.text)
+            print("❌ MINIMAX TTS ERROR:", r.status_code, r.text)
             return ""
 
-        # Simpan file
-        os.makedirs("static", exist_ok=True)
-        filename = f"jarvis_{random.randint(10000,99999)}.mp3"
-        file_path = f"static/{filename}"
+        result = r.json()
 
-        with open(file_path, "wb") as f:
-            f.write(r.content)
+        # MiniMax biasanya mengembalikan audio dalam bentuk hex string
+        if "data" in result and "audio" in result.get("data", {}):
+            audio_hex = result["data"]["audio"]
+            os.makedirs("static", exist_ok=True)
+            filename = f"jarvis_{random.randint(10000,99999)}.mp3"
+            file_path = f"static/{filename}"
 
-        # Hardcoded URL untuk Render
-        base_url = "https://ai-backend-0d98.onrender.com"
-        audio_url = f"{base_url}/static/{filename}"
+            with open(file_path, "wb") as f:
+                f.write(bytes.fromhex(audio_hex))
 
-        print(f"✅ TTS BERHASIL → {audio_url}")
-        return audio_url
+            base_url = "https://ai-backend-0d98.onrender.com"
+            audio_url = f"{base_url}/static/{filename}"
+
+            print(f"✅ MINIMAX TTS BERHASIL → {audio_url}")
+            return audio_url
+
+        else:
+            print("❌ Tidak ada audio dari MiniMax response:", result)
+            return ""
 
     except Exception as e:
-        print("❌ TTS EXCEPTION:", str(e))
+        print("❌ MINIMAX TTS EXCEPTION:", str(e))
         return ""
 
 
@@ -90,7 +122,7 @@ def text_to_speech(text):
 # =========================
 @app.route("/")
 def home():
-    return "Jarvis backend aktif 🚀"
+    return "Jarvis backend aktif (MiniMax + Moss Audio) 🚀"
 
 @app.route("/static/<path:filename>")
 def serve_audio(filename):
@@ -132,7 +164,7 @@ def chat():
                 "state": chat_state[sender]
             })
 
-        # Proses AI
+        # Proses Groq AI
         messages = [{"role": "system", "content": system_prompt}]
         messages += chat_memory[sender][-8:]
         messages.append({"role": "user", "content": user_input})
@@ -175,7 +207,7 @@ def chat():
 
     except Exception as e:
         print("ERROR UTAMA:", str(e))
-        return jsonify({"message": "Gangguan sementara.", "audio": "", "state": "idle"})
+        return jsonify({"message": "Jarvis sedang mengalami gangguan.", "audio": "", "state": "idle"})
 
 
 if __name__ == "__main__":
