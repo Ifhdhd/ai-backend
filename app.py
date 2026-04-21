@@ -14,11 +14,11 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY")
 MINIMAX_GROUP_ID = os.getenv("MINIMAX_GROUP_ID")
 
-# VOICE_ID dari Moss Audio (sudah diisi sesuai yang kamu kasih)
+# VOICE_ID Moss Audio
 VOICE_ID = "moss_audio_8a8e253f-3d67-11f1-a34e-be827e93647d"
 
 # Model TTS MiniMax
-TTS_MODEL = "speech-2.6-turbo"   # Bisa diganti ke "speech-2.8-hd" kalau mau kualitas lebih tinggi
+TTS_MODEL = "speech-2.6-turbo"
 
 # =========================
 # MEMORY + STATE
@@ -92,7 +92,7 @@ def text_to_speech(text):
 
         result = r.json()
 
-        # MiniMax biasanya mengembalikan audio dalam bentuk hex string
+        # Proses audio hex dari MiniMax
         if "data" in result and "audio" in result.get("data", {}):
             audio_hex = result["data"]["audio"]
             os.makedirs("static", exist_ok=True)
@@ -102,14 +102,15 @@ def text_to_speech(text):
             with open(file_path, "wb") as f:
                 f.write(bytes.fromhex(audio_hex))
 
-            base_url = "https://ai-backend-0d98.onrender.com"
+            # 🔥 URL BARU RENDER KAMU
+            base_url = "https://ai-backend-1-dyq7.onrender.com"
             audio_url = f"{base_url}/static/{filename}"
 
             print(f"✅ MINIMAX TTS BERHASIL → {audio_url}")
             return audio_url
 
         else:
-            print("❌ Tidak ada audio dari MiniMax response:", result)
+            print("❌ Tidak ada audio dari MiniMax:", result)
             return ""
 
     except Exception as e:
